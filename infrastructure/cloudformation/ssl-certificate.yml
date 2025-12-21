@@ -1,0 +1,355 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Certificate Management Platform - SSL Certificate Configuration'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: production
+    AllowedValues: [production, staging, development]
+    Description: Environment name
+
+  DomainName:
+    Type: String
+    Description: Domain name for the application (e.g., certificates.example.com)
+    Default: certificates.example.com
+
+  HostedZoneId:
+    Type: String
+    Description: Route 53 Hosted Zone ID for the domain
+    Default: ""
+
+  LoadBalancerArn:
+    Type: String
+    Description: Application Load Balancer ARN from main infrastructure stack
+
+  LoadBalancerDNSName:
+    Type: String
+    Description: Application Load Balancer DNS name
+
+  LoadBalancerHostedZoneId:
+    Type: String
+    Description: Application Load Balancer Hosted Zone ID
+
+Conditions:
+  HasHostedZone: !Not [!Equals [!Ref HostedZoneId, ""]]
+  IsProduction: !Equals [!Ref Environment, production]
+
+Resources:
+  # SSL Certificate
+  SSLCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Condition: HasHostedZone
+    Properties:
+      DomainName: !Ref DomainName
+      SubjectAlternativeNames:
+        - !Sub "*.${DomainName}"
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+        - DomainName: !Sub "*.${DomainName}"
+          HostedZoneId: !Ref HostedZoneId
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment}-certificate-management-ssl
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Route 53 DNS Record
+  DNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: HasHostedZone
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !Ref LoadBalancerDNSName
+        HostedZoneId: !Ref LoadBalancerHostedZoneId
+        EvaluateTargetHealth: true
+
+  # HTTPS Listener for Load Balancer
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasHostedZone
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupArn
+      LoadBalancerArn: !Ref LoadBalancerArn
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+      Certificates:
+        - CertificateArn: !Ref SSLCertificate
+
+  # HTTP to HTTPS Redirect Listener
+  HTTPRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasHostedZone
+    Properties:
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: 443
+            StatusCode: HTTP_301
+      LoadBalancerArn: !Ref LoadBalancerArn
+      Port: 80
+      Protocol: HTTP
+
+  # Security Headers Lambda@Edge Function
+  SecurityHeadersFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub ${Environment}-certificate-management-security-headers
+      FunctionCode: |
+        function handler(event) {
+          var response = event.response;
+          var headers = response.headers;
+          
+          // Security headers
+          headers['strict-transport-security'] = { value: 'max-age=31536000; includeSubDomains; preload' };
+          headers['content-type-options'] = { value: 'nosniff' };
+          headers['frame-options'] = { value: 'DENY' };
+          headers['xss-protection'] = { value: '1; mode=block' };
+          headers['referrer-policy'] = { value: 'strict-origin-when-cross-origin' };
+          headers['content-security-policy'] = { 
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' https:; connect-src 'self' https:; frame-ancestors 'none';"
+          };
+          
+          return response;
+        }
+      FunctionConfig:
+        Comment: Add security headers to responses
+        Runtime: cloudfront-js-1.0
+
+  # CloudFront Distribution for Global CDN (Optional for Production)
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: IsProduction
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+        Origins:
+          - Id: ALBOrigin
+            DomainName: !Ref LoadBalancerDNSName
+            CustomOriginConfig:
+              HTTPPort: 80
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultCacheBehavior:
+          TargetOriginId: ALBOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          Compress: true
+          ForwardedValues:
+            QueryString: true
+            Headers:
+              - Authorization
+              - Content-Type
+              - X-Requested-With
+            Cookies:
+              Forward: all
+          FunctionAssociations:
+            - EventType: viewer-response
+              FunctionARN: !GetAtt SecurityHeadersFunction.FunctionARN
+        CacheBehaviors:
+          - PathPattern: "/api/*"
+            TargetOriginId: ALBOrigin
+            ViewerProtocolPolicy: https-only
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+            CachedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            Compress: true
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+            OriginRequestPolicyId: 88a5eaf4-2fd4-4709-b370-b4c650ea3fcf  # CORS-S3Origin
+          - PathPattern: "/static/*"
+            TargetOriginId: ALBOrigin
+            ViewerProtocolPolicy: https-only
+            AllowedMethods:
+              - GET
+              - HEAD
+            CachedMethods:
+              - GET
+              - HEAD
+            Compress: true
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+        Enabled: true
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref SSLCertificate
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        WebACLId: !Ref WebACLArn
+        Comment: !Sub ${Environment} Certificate Management Platform CDN
+
+  # CloudFront DNS Record
+  CloudFrontDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: IsProduction
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt CloudFrontDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront Hosted Zone ID
+        EvaluateTargetHealth: false
+
+  # Additional Security Group Rules
+  ALBSecurityGroupHTTPSRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasHostedZone
+    Properties:
+      GroupId: !Ref ALBSecurityGroupId
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+      Description: Allow HTTPS traffic from internet
+
+  # WAF Rate Limiting Rule for API Endpoints
+  APIRateLimitRule:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Sub ${Environment}-certificate-management-api-waf
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Name: APIRateLimit
+          Priority: 1
+          Action:
+            Block: {}
+          Statement:
+            RateBasedStatement:
+              Limit: 100
+              AggregateKeyType: IP
+              ScopeDownStatement:
+                ByteMatchStatement:
+                  SearchString: "/api/"
+                  FieldToMatch:
+                    UriPath: {}
+                  TextTransformations:
+                    - Priority: 0
+                      Type: LOWERCASE
+                  PositionalConstraint: STARTS_WITH
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: APIRateLimitRule
+        - Name: FileUploadSizeLimit
+          Priority: 2
+          Action:
+            Block: {}
+          Statement:
+            SizeConstraintStatement:
+              FieldToMatch:
+                Body: {}
+              ComparisonOperator: GT
+              Size: 52428800  # 50MB
+              TextTransformations:
+                - Priority: 0
+                  Type: NONE
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: FileUploadSizeLimitRule
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Sub ${Environment}CertificateManagementAPIWebACL
+
+  # Security Configuration for S3 Bucket
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3BucketName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyInsecureConnections
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Sub "${S3BucketArn}/*"
+              - !Ref S3BucketArn
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          - Sid: AllowECSTaskAccess
+            Effect: Allow
+            Principal:
+              AWS: !Ref ECSTaskRoleArn
+            Action:
+              - 's3:GetObject'
+              - 's3:PutObject'
+              - 's3:DeleteObject'
+            Resource: !Sub "${S3BucketArn}/*"
+          - Sid: AllowECSTaskListBucket
+            Effect: Allow
+            Principal:
+              AWS: !Ref ECSTaskRoleArn
+            Action: 's3:ListBucket'
+            Resource: !Ref S3BucketArn
+
+Outputs:
+  SSLCertificateArn:
+    Condition: HasHostedZone
+    Description: SSL Certificate ARN
+    Value: !Ref SSLCertificate
+    Export:
+      Name: !Sub ${Environment}-certificate-management-ssl-cert
+
+  DomainName:
+    Condition: HasHostedZone
+    Description: Application domain name
+    Value: !Ref DomainName
+    Export:
+      Name: !Sub ${Environment}-certificate-management-domain
+
+  CloudFrontDistributionId:
+    Condition: IsProduction
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+    Export:
+      Name: !Sub ${Environment}-certificate-management-cloudfront
+
+  CloudFrontDomainName:
+    Condition: IsProduction
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub ${Environment}-certificate-management-cloudfront-domain
+
+  APIWebACLArn:
+    Description: API WAF Web ACL ARN
+    Value: !GetAtt APIRateLimitRule.Arn
+    Export:
+      Name: !Sub ${Environment}-certificate-management-api-waf
