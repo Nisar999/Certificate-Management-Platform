@@ -3,7 +3,7 @@
   "routes": [
     {
       "src": "/api/mass-mail/(.*)",
-      "dest": "/api/mass-mail/index.js"
+      "dest": "/api/mass-mail.js"
     },
     {
       "src": "/api/health",
