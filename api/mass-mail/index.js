@@ -1,4 +1,5 @@
 // Vercel serverless function for mass mailer API
+// Updated: Force redeploy with environment variables
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');

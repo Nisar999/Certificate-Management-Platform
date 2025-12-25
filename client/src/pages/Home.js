@@ -9,7 +9,7 @@ const Home = () => {
         <section className="hero-section" aria-labelledby="hero-title">
           <h1 id="hero-title" className="hero-title">Certificate Generator</h1>
           <p className="hero-subtitle">
-            Generate professional certificates with cloud storage and comprehensive reporting
+            Generate professional certificates with comprehensive reporting and mass email distribution
           </p>
         </section>
 
@@ -30,18 +30,6 @@ const Home = () => {
             </article>
 
             <article className="feature-card" role="listitem">
-              <div className="feature-icon" aria-hidden="true">☁️</div>
-              <h3>Cloud Storage</h3>
-              <p>
-                Automatically upload certificates to AWS S3 for secure cloud storage and easy access. 
-                Configure your AWS credentials to enable cloud backup.
-              </p>
-              <div className="btn btn-secondary disabled" aria-label="Cloud storage feature - Ready for use">
-                Cloud Ready
-              </div>
-            </article>
-
-            <article className="feature-card" role="listitem">
               <div className="feature-icon" aria-hidden="true">📊</div>
               <h3>Generation Reports</h3>
               <p>
@@ -52,6 +40,19 @@ const Home = () => {
                 View Reports
               </Link>
               <span id="reports-desc" className="sr-only">Navigate to reports and analytics page</span>
+            </article>
+
+            <article className="feature-card" role="listitem">
+              <div className="feature-icon" aria-hidden="true">📧</div>
+              <h3>Mass Email Distribution</h3>
+              <p>
+                Send certificates to multiple recipients via Gmail integration. Upload recipient lists 
+                and certificates, then distribute with personalized email templates.
+              </p>
+              <Link to="/mass-mailer" className="btn btn-primary" aria-describedby="mass-mailer-desc">
+                Send Emails
+              </Link>
+              <span id="mass-mailer-desc" className="sr-only">Navigate to mass email distribution page</span>
             </article>
           </div>
         </section>
@@ -102,7 +103,7 @@ const Home = () => {
               <div className="material-step-content">
                 <div className="material-step-icon" aria-hidden="true">🎓</div>
                 <h3>Generate & Send</h3>
-                <p>Generate certificates automatically, store securely in cloud, and distribute via mass mailer</p>
+                <p>Generate certificates automatically and distribute via mass mailer with Gmail integration</p>
               </div>
             </li>
           </ol>
