@@ -1,0 +1,26 @@
+{
+  "name": "certificate-management-platform",
+  "version": "2.0.0",
+  "description": "Certificate Management Platform with Mass Mailer",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm start",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "vercel-build": "cd client && npm ci && npm run build",
+    "start": "cd server && npm start"
+  },
+  "keywords": [
+    "certificate",
+    "management",
+    "mass-mailer",
+    "react",
+    "nodejs"
+  ],
+  "author": "Certificate Management Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^7.6.0"
+  }
+}

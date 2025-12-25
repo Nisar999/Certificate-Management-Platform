@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "name": "certificate-management-platform",
+  "builds": [
+    {
+      "src": "client/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "build"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/health",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/api/certificates/(.*)",
+      "dest": "/api/certificates/index.js"
+    },
+    {
+      "src": "/api/reports/(.*)",
+      "dest": "/api/reports/index.js"
+    },
+    {
+      "src": "/api/emails/(.*)",
+      "dest": "/api/emails/index.js"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/health.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/client/build/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  },
+  "functions": {
+    "api/health.js": {
+      "maxDuration": 10
+    },
+    "api/certificates/index.js": {
+      "maxDuration": 30
+    },
+    "api/reports/index.js": {
+      "maxDuration": 15
+    },
+    "api/emails/index.js": {
+      "maxDuration": 30
+    }
+  }
+}

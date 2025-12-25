@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Vercel deployment configuration
+const API_BASE = process.env.NODE_ENV === 'production' 
+  ? '/api'  // Vercel serverless functions
+  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 // Create axios instance with default config
 const api = axios.create({
