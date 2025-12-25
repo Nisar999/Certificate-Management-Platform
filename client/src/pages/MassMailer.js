@@ -49,10 +49,14 @@ const MassMailer = () => {
 
   const checkAuthStatus = async () => {
     try {
-      const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_BASE}/mass-mail/auth/status`);
+      // Use same API base logic as api.js
+      const API_BASE = process.env.NODE_ENV === 'production' 
+        ? '/api'  // Vercel serverless functions
+        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      
+      const response = await fetch(`${API_BASE}/mass-mail/status`);
       const data = await response.json();
-      setIsAuthenticated(data.authenticated);
+      setIsAuthenticated(data.success && data.data.authenticated);
     } catch (error) {
       console.error('Error checking auth status:', error);
       setIsAuthenticated(false);
@@ -60,8 +64,11 @@ const MassMailer = () => {
   };
 
   const handleGoogleAuth = () => {
-    // Redirect to Google OAuth
-    const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    // Use same API base logic as api.js
+    const API_BASE = process.env.NODE_ENV === 'production' 
+      ? '/api'  // Vercel serverless functions
+      : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    
     window.location.href = `${API_BASE}/mass-mail/auth/google`;
   };
 
@@ -97,8 +104,12 @@ const MassMailer = () => {
 
       toast.loading('Sending emails...', { id: 'sending' });
 
-      const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      const response = await fetch(`${API_BASE}/mass-mail/send`, {
+      // Use same API base logic as api.js
+      const API_BASE = process.env.NODE_ENV === 'production' 
+        ? '/api'  // Vercel serverless functions
+        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      
+      const response = await fetch(`${API_BASE}/mass-mail/send-bulk`, {
         method: 'POST',
         body: formData
       });
@@ -205,7 +216,11 @@ const MassMailer = () => {
                   className="btn btn-secondary btn-sm"
                   onClick={async () => {
                     try {
-                      const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                      // Use same API base logic as api.js
+                      const API_BASE = process.env.NODE_ENV === 'production' 
+                        ? '/api'  // Vercel serverless functions
+                        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+                      
                       const response = await fetch(`${API_BASE}/mass-mail/auth/disconnect`, {
                         method: 'POST'
                       });

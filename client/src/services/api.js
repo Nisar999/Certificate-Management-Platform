@@ -154,6 +154,28 @@ export const emailAPI = {
   }
 };
 
+// Mass Mailer API
+export const massMailAPI = {
+  getAuthStatus: () => {
+    return api.get('/mass-mail/status');
+  },
+
+  authenticateWithGoogle: () => {
+    // This will redirect, so no return needed
+    window.location.href = `${API_BASE}/mass-mail/auth/google`;
+  },
+
+  sendBulkEmails: (formData) => {
+    return api.post('/mass-mail/send-bulk', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  disconnect: () => {
+    return api.post('/mass-mail/auth/disconnect');
+  }
+};
+
 // Error handler
 api.interceptors.response.use(
   (response) => response,
