@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "certificate-management-platform",
   "builds": [
     {
       "src": "client/package.json",
@@ -11,6 +10,9 @@
     }
   ],
   "routes": [
+    {
+      "handle": "filesystem"
+    },
     {
       "src": "/api/health",
       "dest": "/api/health.js"
@@ -28,29 +30,8 @@
       "dest": "/api/emails/index.js"
     },
     {
-      "src": "/api/(.*)",
-      "dest": "/api/health.js"
-    },
-    {
       "src": "/(.*)",
-      "dest": "/client/build/$1"
+      "dest": "/client/build/index.html"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  },
-  "functions": {
-    "api/health.js": {
-      "maxDuration": 10
-    },
-    "api/certificates/index.js": {
-      "maxDuration": 30
-    },
-    "api/reports/index.js": {
-      "maxDuration": 15
-    },
-    "api/emails/index.js": {
-      "maxDuration": 30
-    }
-  }
+  ]
 }
