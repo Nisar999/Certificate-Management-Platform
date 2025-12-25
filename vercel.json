@@ -1,18 +1,8 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "client/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
+  "buildCommand": "cd client && npm install && npm run build",
+  "outputDirectory": "client/build",
   "routes": [
-    {
-      "handle": "filesystem"
-    },
     {
       "src": "/api/health",
       "dest": "/api/health.js"
@@ -31,7 +21,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/client/build/index.html"
+      "dest": "/index.html"
     }
   ]
 }
