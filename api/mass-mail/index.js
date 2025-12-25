@@ -22,7 +22,7 @@ export default async function handler(req, res) {
 
   try {
     // Google OAuth authentication
-    if (method === 'GET' && urlPath === '/api/mass-mail/auth/google') {
+    if (method === 'GET' && (urlPath === '/auth/google' || urlPath === '/api/mass-mail/auth/google')) {
       // Build Google OAuth URL with environment variables
       const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
         `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
@@ -35,7 +35,7 @@ export default async function handler(req, res) {
     }
 
     // OAuth callback
-    if (method === 'GET' && urlPath === '/api/mass-mail/auth/callback') {
+    if (method === 'GET' && (urlPath === '/auth/callback' || urlPath === '/api/mass-mail/auth/callback')) {
       const { code } = req.query;
 
       if (!code) {
@@ -107,7 +107,7 @@ export default async function handler(req, res) {
     }
 
     // Send bulk emails
-    if (method === 'POST' && urlPath === '/api/mass-mail/send-bulk') {
+    if (method === 'POST' && (urlPath === '/send-bulk' || urlPath === '/api/mass-mail/send-bulk')) {
       const { recipients, subject, template, attachments = [] } = req.body;
 
       if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
@@ -151,7 +151,7 @@ export default async function handler(req, res) {
     }
 
     // Get email status
-    if (method === 'GET' && urlPath === '/api/mass-mail/status') {
+    if (method === 'GET' && (urlPath === '/status' || urlPath === '/api/mass-mail/status')) {
       const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
       
       return res.json({
