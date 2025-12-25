@@ -63,12 +63,38 @@ After deployment, add these environment variables in Vercel Dashboard:
 NODE_ENV=production
 ```
 
-### **Optional Variables (for full functionality):**
+### **Google OAuth Configuration (Required for Mass Mailer):**
 ```
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=https://your-app.vercel.app/api/emails/auth-callback
+GOOGLE_CLIENT_ID=your_google_client_id_from_gcp_console
+GOOGLE_CLIENT_SECRET=your_google_client_secret_from_gcp_console
 ```
+
+### **Optional Variables:**
+```
+BASE_URL=https://your-custom-domain.com
+# If not set, will auto-detect from VERCEL_URL or use default
+```
+
+### **How to Add Environment Variables in Vercel:**
+1. Go to your Vercel Dashboard
+2. Select your project
+3. Go to **Settings** → **Environment Variables**
+4. Add each variable:
+   - **Name**: `GOOGLE_CLIENT_ID`
+   - **Value**: Your actual Google Client ID from GCP Console
+   - **Environment**: Production (and Preview if needed)
+5. Click **Save**
+6. Redeploy your project for changes to take effect
+
+### **Getting Google OAuth Credentials:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing one
+3. Enable **Gmail API**
+4. Go to **APIs & Services** → **Credentials**
+5. Create **OAuth 2.0 Client ID**
+6. Set **Authorized JavaScript origins**: `https://your-vercel-app.vercel.app`
+7. Set **Authorized redirect URIs**: `https://your-vercel-app.vercel.app/api/mass-mail/auth/callback`
+8. Copy the Client ID and Client Secret to Vercel environment variables
 
 ## 📁 **Project Structure for Vercel**
 

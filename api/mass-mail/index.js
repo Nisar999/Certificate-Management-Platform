@@ -12,13 +12,21 @@ export default async function handler(req, res) {
   const { method, url } = req;
   const urlPath = url.split('?')[0];
 
+  // Environment variables with fallbacks
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'mock_client_id';
+  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'mock_client_secret';
+  const BASE_URL = process.env.VERCEL_URL 
+    ? `https://${process.env.VERCEL_URL}` 
+    : process.env.BASE_URL || 'https://certificate-management-platform.vercel.app';
+  const REDIRECT_URI = `${BASE_URL}/api/mass-mail/auth/callback`;
+
   try {
     // Google OAuth authentication
     if (method === 'GET' && urlPath === '/api/mass-mail/auth/google') {
-      // Mock Google OAuth URL for demonstration
+      // Build Google OAuth URL with environment variables
       const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-        'client_id=mock_client_id&' +
-        'redirect_uri=https://certificate-management-platform.vercel.app/api/mass-mail/auth/callback&' +
+        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
+        `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
         'response_type=code&' +
         'scope=https://www.googleapis.com/auth/gmail.send&' +
         'access_type=offline';
@@ -37,14 +45,63 @@ export default async function handler(req, res) {
         });
       }
 
-      // Mock token exchange - in production, you'd exchange the code for tokens
+      // If using real Google credentials, exchange code for tokens
+      if (GOOGLE_CLIENT_ID !== 'mock_client_id' && GOOGLE_CLIENT_SECRET !== 'mock_client_secret') {
+        try {
+          // Exchange authorization code for access token
+          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: GOOGLE_CLIENT_ID,
+              client_secret: GOOGLE_CLIENT_SECRET,
+              code: code,
+              grant_type: 'authorization_code',
+              redirect_uri: REDIRECT_URI,
+            }),
+          });
+
+          const tokenData = await tokenResponse.json();
+
+          if (!tokenResponse.ok) {
+            return res.status(400).json({
+              success: false,
+              error: 'Failed to exchange authorization code',
+              details: tokenData.error_description || tokenData.error
+            });
+          }
+
+          return res.json({
+            success: true,
+            message: 'Authentication successful',
+            data: {
+              accessToken: tokenData.access_token,
+              refreshToken: tokenData.refresh_token,
+              expiresIn: tokenData.expires_in,
+              tokenType: tokenData.token_type
+            }
+          });
+
+        } catch (error) {
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to authenticate with Google',
+            details: error.message
+          });
+        }
+      }
+
+      // Mock token exchange for demonstration
       return res.json({
         success: true,
-        message: 'Authentication successful',
+        message: 'Authentication successful (Demo Mode)',
         data: {
           accessToken: 'mock_access_token',
           refreshToken: 'mock_refresh_token',
-          expiresIn: 3600
+          expiresIn: 3600,
+          tokenType: 'Bearer'
         }
       });
     }
@@ -95,13 +152,17 @@ export default async function handler(req, res) {
 
     // Get email status
     if (method === 'GET' && urlPath === '/api/mass-mail/status') {
+      const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
+      
       return res.json({
         success: true,
         data: {
           authenticated: true,
-          email: 'demo@example.com',
+          email: isRealAuth ? 'Connected via Google OAuth' : 'demo@example.com',
           quotaRemaining: 500,
-          lastActivity: new Date().toISOString()
+          lastActivity: new Date().toISOString(),
+          authMode: isRealAuth ? 'production' : 'demo',
+          clientId: GOOGLE_CLIENT_ID.substring(0, 20) + '...' // Show partial client ID for verification
         }
       });
     }

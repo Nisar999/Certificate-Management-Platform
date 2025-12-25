@@ -45,17 +45,23 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "🎉 Your app is now live on Vercel!" -ForegroundColor Cyan
     Write-Host "💰 Cost: $0/month (100% FREE)" -ForegroundColor Green
 
-    Write-Host "`n📋 Next Steps:" -ForegroundColor Yellow
-    Write-Host "1. Visit your Vercel dashboard to see the live URL"
-    Write-Host "2. Set up environment variables if needed"
-    Write-Host "3. Configure custom domain (optional)"
-    Write-Host "4. Test all features on the live site"
+    Write-Host "`n📋 Next Steps for OAuth Setup:" -ForegroundColor Yellow
+    Write-Host "1. Go to your Vercel Dashboard → Settings → Environment Variables"
+    Write-Host "2. Add these environment variables:"
+    Write-Host "   - GOOGLE_CLIENT_ID=your_google_client_id"
+    Write-Host "   - GOOGLE_CLIENT_SECRET=your_google_client_secret"
+    Write-Host "3. Redeploy after adding environment variables"
+    Write-Host "4. Test the Mass Mailer OAuth authentication"
+    Write-Host ""
+    Write-Host "🔗 OAuth Redirect URI for Google Cloud Console:" -ForegroundColor Cyan
+    Write-Host "https://certificate-management-platform.vercel.app/api/mass-mail/auth/callback"
     Write-Host ""
     Write-Host "🔗 API Endpoints Available:" -ForegroundColor Cyan
     Write-Host "  - /api/health (Health check)"
     Write-Host "  - /api/certificates (Certificate management)"
     Write-Host "  - /api/reports (Analytics and reports)"
     Write-Host "  - /api/emails (Email campaigns)"
+    Write-Host "  - /api/mass-mail (Mass mailer with OAuth)"
 } else {
     Write-Host "❌ Deployment failed. Check the error messages above." -ForegroundColor Red
     exit 1
