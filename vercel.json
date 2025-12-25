@@ -1,25 +1,8 @@
 {
   "version": 2,
-  "routes": [
-    {
-      "src": "/api/mass-mail/(.*)",
-      "dest": "/api/mass-mail.js"
-    },
-    {
-      "src": "/api/health",
-      "dest": "/api/health.js"
-    },
-    {
-      "src": "/api/certificates/(.*)",
-      "dest": "/api/certificates/index.js"
-    },
-    {
-      "src": "/api/reports/(.*)",
-      "dest": "/api/reports/index.js"
-    },
-    {
-      "src": "/api/emails/(.*)",
-      "dest": "/api/emails/index.js"
+  "functions": {
+    "api/mass-mail.js": {
+      "runtime": "nodejs18.x"
     }
-  ]
+  }
 }

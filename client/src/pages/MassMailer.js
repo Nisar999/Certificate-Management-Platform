@@ -54,7 +54,7 @@ const MassMailer = () => {
         ? '/api'  // Vercel serverless functions
         : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
       
-      const response = await fetch(`${API_BASE}/mass-mail/status`);
+      const response = await fetch(`${API_BASE}/mass-mail`);
       const data = await response.json();
       setIsAuthenticated(data.success && data.data.authenticated);
     } catch (error) {
@@ -69,7 +69,7 @@ const MassMailer = () => {
       ? '/api'  // Vercel serverless functions
       : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
     
-    window.location.href = `${API_BASE}/mass-mail/auth/google`;
+    window.location.href = `${API_BASE}/mass-mail?action=auth`;
   };
 
   const handleDemoMode = () => {
@@ -109,7 +109,7 @@ const MassMailer = () => {
         ? '/api'  // Vercel serverless functions
         : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
       
-      const response = await fetch(`${API_BASE}/mass-mail/send-bulk`, {
+      const response = await fetch(`${API_BASE}/mass-mail?action=send`, {
         method: 'POST',
         body: formData
       });

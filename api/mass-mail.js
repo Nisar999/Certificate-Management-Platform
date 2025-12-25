@@ -9,24 +9,23 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { method, url } = req;
-  const urlPath = url.split('?')[0];
-
+  const { method, query } = req;
+  
   // Environment variables with fallbacks
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'mock_client_id';
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'mock_client_secret';
   const BASE_URL = process.env.VERCEL_URL 
     ? `https://${process.env.VERCEL_URL}` 
-    : process.env.BASE_URL || 'https://certificate-management-platform.vercel.app';
-  const REDIRECT_URI = `${BASE_URL}/api/mass-mail/auth/callback`;
+    : 'https://certificate-management-platform.vercel.app';
 
   try {
-    // Debug: Log the request details
-    console.log('Mass Mail API Request:', { method, urlPath, query: req.query });
+    // Handle different sub-routes based on query parameters
+    const action = query.action || 'status';
 
     // Google OAuth authentication
-    if (method === 'GET' && (urlPath.includes('/auth/google') || urlPath === '/auth/google')) {
-      // Build Google OAuth URL with environment variables
+    if (action === 'auth' && method === 'GET') {
+      const REDIRECT_URI = `${BASE_URL}/api/mass-mail?action=callback`;
+      
       const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
         `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
@@ -38,62 +37,14 @@ export default async function handler(req, res) {
     }
 
     // OAuth callback
-    if (method === 'GET' && (urlPath.includes('/auth/callback') || urlPath === '/auth/callback')) {
-      const { code } = req.query;
+    if (action === 'callback' && method === 'GET') {
+      const { code } = query;
 
       if (!code) {
         return res.status(400).json({
           success: false,
           error: 'Authorization code is required'
         });
-      }
-
-      // If using real Google credentials, exchange code for tokens
-      if (GOOGLE_CLIENT_ID !== 'mock_client_id' && GOOGLE_CLIENT_SECRET !== 'mock_client_secret') {
-        try {
-          // Exchange authorization code for access token
-          const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams({
-              client_id: GOOGLE_CLIENT_ID,
-              client_secret: GOOGLE_CLIENT_SECRET,
-              code: code,
-              grant_type: 'authorization_code',
-              redirect_uri: REDIRECT_URI,
-            }),
-          });
-
-          const tokenData = await tokenResponse.json();
-
-          if (!tokenResponse.ok) {
-            return res.status(400).json({
-              success: false,
-              error: 'Failed to exchange authorization code',
-              details: tokenData.error_description || tokenData.error
-            });
-          }
-
-          return res.json({
-            success: true,
-            message: 'Authentication successful',
-            data: {
-              accessToken: tokenData.access_token,
-              refreshToken: tokenData.refresh_token,
-              expiresIn: tokenData.expires_in,
-              tokenType: tokenData.token_type
-            }
-          });
-
-        } catch (error) {
-          return res.status(500).json({
-            success: false,
-            error: 'Failed to authenticate with Google',
-            details: error.message
-          });
-        }
       }
 
       // Mock token exchange for demonstration
@@ -110,8 +61,8 @@ export default async function handler(req, res) {
     }
 
     // Send bulk emails
-    if (method === 'POST' && (urlPath.includes('/send-bulk') || urlPath === '/send-bulk')) {
-      const { recipients, subject, template, attachments = [] } = req.body;
+    if (action === 'send' && method === 'POST') {
+      const { recipients, subject, template } = req.body;
 
       if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
         return res.status(400).json({
@@ -120,18 +71,11 @@ export default async function handler(req, res) {
         });
       }
 
-      if (!subject || !template) {
-        return res.status(400).json({
-          success: false,
-          error: 'Subject and template are required'
-        });
-      }
-
       // Mock email sending
       const results = recipients.map((recipient, index) => ({
         email: recipient.email,
         name: recipient.name,
-        status: Math.random() > 0.05 ? 'sent' : 'failed', // 95% success rate
+        status: Math.random() > 0.05 ? 'sent' : 'failed',
         messageId: `mock_message_${Date.now()}_${index}`,
         sentAt: new Date().toISOString()
       }));
@@ -146,47 +90,29 @@ export default async function handler(req, res) {
           total: recipients.length,
           successful,
           failed,
-          results,
-          campaignId: `campaign_${Date.now()}`,
-          sentAt: new Date().toISOString()
+          results
         }
       });
     }
 
-    // Get email status - this should work for any GET request to the base endpoint
-    if (method === 'GET') {
-      const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
-      
-      return res.json({
-        success: true,
-        data: {
-          authenticated: true,
-          email: isRealAuth ? 'Connected via Google OAuth' : 'demo@example.com',
-          quotaRemaining: 500,
-          lastActivity: new Date().toISOString(),
-          authMode: isRealAuth ? 'production' : 'demo',
-          clientId: GOOGLE_CLIENT_ID.substring(0, 20) + '...', // Show partial client ID for verification
-          requestInfo: {
-            method,
-            urlPath,
-            query: req.query
-          }
-        }
-      });
-    }
-
-    // Default 404 for unmatched routes
-    return res.status(404).json({
-      success: false,
-      error: {
-        code: 'ENDPOINT_NOT_FOUND',
-        message: 'Mass mailer API endpoint not found',
-        requestInfo: { method, urlPath },
-        availableEndpoints: [
-          'GET /api/mass-mail/auth/google',
-          'GET /api/mass-mail/auth/callback',
-          'POST /api/mass-mail/send-bulk',
-          'GET /api/mass-mail/status'
+    // Default status endpoint
+    const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
+    
+    return res.json({
+      success: true,
+      message: 'Mass Mailer API is working!',
+      data: {
+        authenticated: true,
+        email: isRealAuth ? 'Connected via Google OAuth' : 'demo@example.com',
+        quotaRemaining: 500,
+        lastActivity: new Date().toISOString(),
+        authMode: isRealAuth ? 'production' : 'demo',
+        clientId: GOOGLE_CLIENT_ID.substring(0, 20) + '...',
+        availableActions: [
+          'GET /api/mass-mail (status)',
+          'GET /api/mass-mail?action=auth (Google OAuth)',
+          'GET /api/mass-mail?action=callback (OAuth callback)',
+          'POST /api/mass-mail?action=send (Send emails)'
         ]
       }
     });
