@@ -9,7 +9,7 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { method, query } = req;
+  const { method, query, url } = req;
   
   // Environment variables with fallbacks
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'mock_client_id';
@@ -19,45 +19,66 @@ export default async function handler(req, res) {
     : 'https://certificate-management-platform.vercel.app';
 
   try {
-    // Handle different sub-routes based on query parameters
-    const action = query.action || 'status';
+    // Parse the URL path to handle both query params and path-based routing
+    const urlPath = url.split('?')[0];
+    const pathSegments = urlPath.split('/').filter(Boolean);
+    
+    // Handle path-based routing: /api/mass-mail/auth/google
+    let action = query.action || 'status';
+    
+    // Check if URL contains /auth/google or /auth/google/callback
+    if (pathSegments.includes('auth')) {
+      const authIndex = pathSegments.indexOf('auth');
+      const nextSegment = pathSegments[authIndex + 1];
+      
+      if (nextSegment === 'google') {
+        const callbackSegment = pathSegments[authIndex + 2];
+        action = callbackSegment === 'callback' ? 'callback' : 'auth';
+      }
+    }
 
     // Google OAuth authentication
     if (action === 'auth' && method === 'GET') {
-      const REDIRECT_URI = `${BASE_URL}/api/mass-mail?action=callback`;
+      const REDIRECT_URI = `${BASE_URL}/api/mass-mail/auth/google/callback`;
       
       const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
         `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
         'response_type=code&' +
-        'scope=https://www.googleapis.com/auth/gmail.send&' +
-        'access_type=offline';
+        'scope=https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&' +
+        'access_type=offline&' +
+        'prompt=consent';
 
       return res.redirect(authUrl);
     }
 
     // OAuth callback
     if (action === 'callback' && method === 'GET') {
-      const { code } = query;
+      const { code, error } = query;
 
-      if (!code) {
-        return res.status(400).json({
-          success: false,
-          error: 'Authorization code is required'
-        });
+      if (error) {
+        // Redirect to frontend with error
+        const frontendUrl = BASE_URL.includes('vercel.app') 
+          ? BASE_URL 
+          : 'http://localhost:3000';
+        return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=${encodeURIComponent(error)}`);
       }
 
-      // Mock token exchange for demonstration
-      return res.json({
-        success: true,
-        message: 'Authentication successful (Demo Mode)',
-        data: {
-          accessToken: 'mock_access_token',
-          refreshToken: 'mock_refresh_token',
-          expiresIn: 3600,
-          tokenType: 'Bearer'
-        }
-      });
+      if (!code) {
+        const frontendUrl = BASE_URL.includes('vercel.app') 
+          ? BASE_URL 
+          : 'http://localhost:3000';
+        return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=no_code`);
+      }
+
+      // In production, you would exchange the code for tokens here
+      // For now, we'll redirect to the frontend with success
+      const frontendUrl = BASE_URL.includes('vercel.app') 
+        ? BASE_URL 
+        : 'http://localhost:3000';
+      
+      // Store the code temporarily (in production, use proper token storage)
+      return res.redirect(`${frontendUrl}/mass-mailer?auth=success&code=${encodeURIComponent(code)}`);
     }
 
     // Send bulk emails

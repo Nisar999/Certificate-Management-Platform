@@ -8,10 +8,10 @@ import Home from './pages/Home';
 import CertificateGenerator from './pages/CertificateGenerator';
 import ParticipantManagement from './pages/ParticipantManagement';
 import TemplateManagement from './pages/TemplateManagement';
-
 import MassMailer from './pages/MassMailer';
 import Reports from './pages/Reports';
 import PerformanceTest from './pages/PerformanceTest';
+import NotFound from './pages/NotFound';
 import './App.css';
 
 // Performance optimization utilities (loaded conditionally)
@@ -254,15 +254,7 @@ function App() {
             <Route path="/reports" element={<Reports />} />
             <Route path="/performance-test" element={<PerformanceTest />} />
             {/* Catch-all route for 404 */}
-            <Route path="*" element={
-              <div className="container text-center" role="alert" style={{ padding: '4rem 2rem' }}>
-                <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>404 - Page Not Found</h1>
-                <p style={{ fontSize: '1.2rem', marginBottom: '2rem' }}>The page you're looking for doesn't exist in the Certificate Management Platform.</p>
-                <a href="/" className="btn btn-primary" style={{ padding: '0.75rem 2rem', fontSize: '1rem' }}>
-                  Return to Home
-                </a>
-              </div>
-            } />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
         

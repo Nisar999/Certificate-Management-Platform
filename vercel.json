@@ -10,6 +10,18 @@
   },
   "rewrites": [
     {
+      "source": "/api/mass-mail/auth/google/callback",
+      "destination": "/api/mass-mail"
+    },
+    {
+      "source": "/api/mass-mail/auth/google",
+      "destination": "/api/mass-mail"
+    },
+    {
+      "source": "/api/mass-mail/(.*)",
+      "destination": "/api/mass-mail"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
