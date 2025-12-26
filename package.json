@@ -8,7 +8,7 @@
     "server": "cd server && npm start",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
-    "vercel-build": "cd client && npm ci && npm run build",
+    "vercel-build": "cd client && npm install && npm run build",
     "start": "cd server && npm start"
   },
   "keywords": [
