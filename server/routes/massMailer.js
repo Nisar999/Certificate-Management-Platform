@@ -22,6 +22,42 @@ const oauth2Client = new google.auth.OAuth2(
   process.env.GMAIL_REDIRECT_URI || 'http://localhost:5000/api/mass-mail/auth/google/callback'
 );
 
+// Root status endpoint (GET /api/mass-mail)
+router.get('/', (req, res) => {
+  try {
+    const tokensPath = path.join(__dirname, '..', 'tokens.json');
+    let authenticated = false;
+    let email = 'demo@example.com';
+    
+    if (fs.existsSync(tokensPath)) {
+      try {
+        const tokens = JSON.parse(fs.readFileSync(tokensPath));
+        oauth2Client.setCredentials(tokens);
+        authenticated = true;
+      } catch (error) {
+        console.error('Error reading tokens:', error);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Mass Mailer API is working!',
+      data: {
+        authenticated,
+        email,
+        quotaRemaining: 500,
+        lastActivity: new Date().toISOString(),
+        authMode: authenticated ? 'production' : 'demo'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Google OAuth routes (accessible via /api/mass-mail/auth/google)
 router.get('/auth/google', (req, res) => {
   const scopes = [

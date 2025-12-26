@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     // Handle path-based routing: /api/mass-mail/auth/google
     let action = query.action || 'status';
     
-    // Check if URL contains /auth/google or /auth/google/callback
+    // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
     if (pathSegments.includes('auth')) {
       const authIndex = pathSegments.indexOf('auth');
       const nextSegment = pathSegments[authIndex + 1];
@@ -34,6 +34,8 @@ export default async function handler(req, res) {
       if (nextSegment === 'google') {
         const callbackSegment = pathSegments[authIndex + 2];
         action = callbackSegment === 'callback' ? 'callback' : 'auth';
+      } else if (nextSegment === 'disconnect') {
+        action = 'disconnect';
       }
     }
 
@@ -112,6 +114,18 @@ export default async function handler(req, res) {
           successful,
           failed,
           results
+        }
+      });
+    }
+
+    // Disconnect from Gmail
+    if (action === 'disconnect' && method === 'POST') {
+      // In production, you would revoke tokens here
+      return res.json({
+        success: true,
+        message: 'Successfully disconnected from Gmail',
+        data: {
+          disconnectedAt: new Date().toISOString()
         }
       });
     }

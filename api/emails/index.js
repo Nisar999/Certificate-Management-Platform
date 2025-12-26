@@ -174,7 +174,119 @@ export default async function handler(req, res) {
 
       return res.json({
         success: true,
-        data: campaigns
+        data: { campaigns }
+      });
+    }
+
+    // Create email campaign
+    if (method === 'POST' && urlPath === '/api/emails/campaign') {
+      const { name, subject, batchId, templateId, scheduledFor } = req.body;
+
+      if (!name || !subject || !batchId) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Name, subject, and batchId are required'
+          }
+        });
+      }
+
+      const newCampaign = {
+        id: Date.now(),
+        name,
+        subject,
+        batchId,
+        templateId,
+        scheduledFor,
+        status: 'draft',
+        recipients: 0,
+        sent: 0,
+        delivered: 0,
+        opened: 0,
+        clicked: 0,
+        bounced: 0,
+        createdAt: new Date().toISOString()
+      };
+
+      return res.status(201).json({
+        success: true,
+        message: 'Campaign created successfully',
+        data: newCampaign
+      });
+    }
+
+    // Send campaign
+    if (method === 'POST' && urlPath.match(/^\/api\/emails\/send\/\d+$/)) {
+      const campaignId = parseInt(urlPath.split('/').pop());
+
+      return res.json({
+        success: true,
+        message: 'Campaign sending started',
+        data: {
+          campaignId,
+          status: 'sending',
+          startedAt: new Date().toISOString()
+        }
+      });
+    }
+
+    // Get campaign progress
+    if (method === 'GET' && urlPath.match(/^\/api\/emails\/campaign\/\d+\/progress$/)) {
+      const campaignId = parseInt(urlPath.split('/')[3]);
+
+      return res.json({
+        success: true,
+        data: {
+          campaignId,
+          progress: {
+            total: 100,
+            sent: 85,
+            delivered: 82,
+            failed: 3,
+            pending: 15,
+            percentage: 85
+          }
+        }
+      });
+    }
+
+    // Retry failed emails
+    if (method === 'POST' && urlPath.match(/^\/api\/emails\/campaign\/\d+\/retry$/)) {
+      const campaignId = parseInt(urlPath.split('/')[3]);
+
+      return res.json({
+        success: true,
+        message: 'Retry completed',
+        data: {
+          campaignId,
+          successCount: 2,
+          failedCount: 1
+        }
+      });
+    }
+
+    // Get campaign statistics summary
+    if (method === 'GET' && urlPath.match(/^\/api\/emails\/campaign\/\d+\/statistics-summary$/)) {
+      const campaignId = parseInt(urlPath.split('/')[3]);
+
+      return res.json({
+        success: true,
+        data: {
+          summary: {
+            campaignId,
+            total: 100,
+            sent: 98,
+            delivered: 95,
+            opened: 78,
+            clicked: 12,
+            bounced: 3,
+            failed: 2,
+            deliveryRate: 95,
+            openRate: 78,
+            clickRate: 12
+          }
+        }
       });
     }
 
@@ -210,12 +322,18 @@ export default async function handler(req, res) {
       error: {
         code: 'ENDPOINT_NOT_FOUND',
         message: 'Email API endpoint not found',
+        requestedUrl: urlPath,
         availableEndpoints: [
           'GET /api/emails/auth-url',
           'POST /api/emails/auth-callback',
           'POST /api/emails/send-bulk',
           'GET /api/emails/templates',
           'GET /api/emails/campaigns',
+          'POST /api/emails/campaign',
+          'POST /api/emails/send/:id',
+          'GET /api/emails/campaign/:id/progress',
+          'POST /api/emails/campaign/:id/retry',
+          'GET /api/emails/campaign/:id/statistics-summary',
           'POST /api/emails/test'
         ]
       }
