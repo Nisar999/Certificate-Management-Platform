@@ -1,9 +1,5 @@
 {
   "version": 2,
-  "buildCommand": "npm --prefix client install && npm --prefix client run build",
-  "outputDirectory": "client/build",
-  "installCommand": "echo 'Installing dependencies'",
-  "framework": null,
   "functions": {
     "api/mass-mail.js": {
       "runtime": "nodejs18.x",
