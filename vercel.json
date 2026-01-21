@@ -5,15 +5,23 @@
       "runtime": "nodejs18.x",
       "maxDuration": 10
     },
-    "api/mass-mail/[...slug].js": {
+    "api/mass-mail/router.js": {
       "runtime": "nodejs18.x",
       "maxDuration": 10
     }
   },
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/mass-mail/auth/(.*)",
+      "destination": "/api/mass-mail/router.js?path=$1"
+    },
+    {
+      "source": "/api/mass-mail/(.*)",
+      "destination": "/api/mass-mail/router.js?path=$1"
+    },
+    {
+      "source": "/api/mass-mail",
+      "destination": "/api/mass-mail/index.js"
     },
     {
       "source": "/(.*)",
