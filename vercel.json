@@ -1,7 +1,15 @@
 {
   "version": 2,
   "functions": {
-    "api/mass-mail-api.js": {
+    "api/mass-mail/index.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 10
+    },
+    "api/mass-mail/auth/google.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 10
+    },
+    "api/mass-mail/auth/google/callback.js": {
       "runtime": "nodejs18.x",
       "maxDuration": 10
     }
@@ -9,11 +17,15 @@
   "rewrites": [
     {
       "source": "/api/mass-mail",
-      "destination": "/api/mass-mail-api.js"
+      "destination": "/api/mass-mail/index.js"
     },
     {
-      "source": "/api/mass-mail/(.*)",
-      "destination": "/api/mass-mail-api.js?path=$1"
+      "source": "/api/mass-mail/auth/google",
+      "destination": "/api/mass-mail/auth/google.js"
+    },
+    {
+      "source": "/api/mass-mail/auth/google/callback",
+      "destination": "/api/mass-mail/auth/google/callback.js"
     },
     {
       "source": "/(.*)",
