@@ -1,27 +1,19 @@
 {
   "version": 2,
   "functions": {
-    "api/mass-mail/index.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 10
-    },
-    "api/mass-mail/router.js": {
+    "api/mass-mail-api.js": {
       "runtime": "nodejs18.x",
       "maxDuration": 10
     }
   },
   "rewrites": [
     {
-      "source": "/api/mass-mail/auth/(.*)",
-      "destination": "/api/mass-mail/router.js?path=$1"
+      "source": "/api/mass-mail",
+      "destination": "/api/mass-mail-api.js"
     },
     {
       "source": "/api/mass-mail/(.*)",
-      "destination": "/api/mass-mail/router.js?path=$1"
-    },
-    {
-      "source": "/api/mass-mail",
-      "destination": "/api/mass-mail/index.js"
+      "destination": "/api/mass-mail-api.js?path=$1"
     },
     {
       "source": "/(.*)",
