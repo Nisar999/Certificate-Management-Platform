@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { massMailAPI } from '../services/api';
 import './MassMailerClean.css';
 import './MassMailerMaterial.css';
 
@@ -15,7 +16,7 @@ const MassMailer = () => {
 
   useEffect(() => {
     checkAuthStatus();
-    
+
     // Check for auth success/error from URL params
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('auth') === 'success') {
@@ -26,7 +27,7 @@ const MassMailer = () => {
     } else if (urlParams.get('auth') === 'error') {
       const reason = urlParams.get('reason');
       let errorMessage = 'Failed to authenticate with Gmail';
-      
+
       switch (reason) {
         case 'authorization_denied':
           errorMessage = 'Gmail authorization was denied. Please try again and grant permissions.';
@@ -40,7 +41,7 @@ const MassMailer = () => {
         default:
           errorMessage = 'Gmail authentication failed. Please check your configuration.';
       }
-      
+
       toast.error(errorMessage);
       // Clean up URL
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -49,13 +50,9 @@ const MassMailer = () => {
 
   const checkAuthStatus = async () => {
     try {
-      // Use same API base logic as api.js
-      const API_BASE = process.env.NODE_ENV === 'production' 
-        ? '/api'  // Vercel serverless functions
-        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      
-      const response = await fetch(`${API_BASE}/mass-mail`);
-      const data = await response.json();
+      // Use centralized API
+      const response = await massMailAPI.getAuthStatus();
+      const data = response.data;
       setIsAuthenticated(data.success && data.data.authenticated);
     } catch (error) {
       console.error('Error checking auth status:', error);
@@ -64,12 +61,8 @@ const MassMailer = () => {
   };
 
   const handleGoogleAuth = () => {
-    // Use same API base logic as api.js
-    const API_BASE = process.env.NODE_ENV === 'production' 
-      ? '/api'  // Vercel serverless functions
-      : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-    
-    window.location.href = `${API_BASE}/mass-mail?action=auth`;
+    // Use centralized API
+    massMailAPI.authenticateWithGoogle();
   };
 
   const handleDemoMode = () => {
@@ -80,7 +73,7 @@ const MassMailer = () => {
 
   const handleSendEmails = async (e) => {
     e.preventDefault();
-    
+
     if (!zipFile || !csvFile) {
       toast.error('Please select both ZIP file and CSV file');
       return;
@@ -93,7 +86,7 @@ const MassMailer = () => {
 
     setLoading(true);
     setResults(null);
-    
+
     try {
       const formData = new FormData();
       formData.append('zipfile', zipFile);
@@ -104,50 +97,20 @@ const MassMailer = () => {
 
       toast.loading('Sending emails...', { id: 'sending' });
 
-      // Use same API base logic as api.js
-      const API_BASE = process.env.NODE_ENV === 'production' 
-        ? '/api'  // Vercel serverless functions
-        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-      
-      const response = await fetch(`${API_BASE}/mass-mail?action=send`, {
-        method: 'POST',
-        body: formData
-      });
+      // Use centralized API
+      const response = await massMailAPI.sendBulkEmails(formData);
 
-      if (response.ok) {
-        // Check if response is CSV (successful)
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('text/csv')) {
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `email_results_${new Date().toISOString().split('T')[0]}.csv`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          window.URL.revokeObjectURL(url);
-          
-          toast.success('Emails sent successfully! Results downloaded.', { id: 'sending' });
-          
-          // Reset form
-          setZipFile(null);
-          setCsvFile(null);
-          setSenderDisplayName('');
-          
-          // Show basic results (you could parse CSV for more details)
-          setResults({
-            total: 'Check CSV',
-            sent: 'Check CSV', 
-            failed: 'Check CSV'
-          });
-        } else {
-          const data = await response.json();
-          toast.error(data.message || 'Failed to send emails', { id: 'sending' });
-        }
+      if (response.data.success) {
+        toast.success('Emails sent successfully!', { id: 'sending' });
+
+        // Reset form
+        setZipFile(null);
+        setCsvFile(null);
+        setSenderDisplayName('');
+
+        setResults(response.data.data);
       } else {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to send emails', { id: 'sending' });
+        toast.error(response.data.message || 'Failed to send emails', { id: 'sending' });
       }
     } catch (error) {
       console.error('Error sending emails:', error);
@@ -174,7 +137,7 @@ const MassMailer = () => {
                 </h2>
                 <p className="md-card-subtitle mb-8">Connect your Gmail account to send mass emails</p>
                 <div className="space-y-4">
-                  <button 
+                  <button
                     className="btn btn-primary btn-lg md-button-raised"
                     onClick={handleGoogleAuth}
                     aria-describedby="google-auth-desc"
@@ -185,7 +148,7 @@ const MassMailer = () => {
                   <p id="google-auth-desc" className="sr-only">
                     This will redirect you to Google's authentication page to authorize Gmail access
                   </p>
-                  <button 
+                  <button
                     className="btn btn-secondary"
                     onClick={() => {
                       setIsAuthenticated(true);
@@ -212,21 +175,14 @@ const MassMailer = () => {
                   </span>
                   <p className="text-secondary mt-2">You can now send mass emails. Fill out the form below to get started.</p>
                 </div>
-                <button 
+                <button
                   className="btn btn-secondary btn-sm"
                   onClick={async () => {
                     try {
-                      // Use same API base logic as api.js
-                      const API_BASE = process.env.NODE_ENV === 'production' 
-                        ? '/api'  // Vercel serverless functions
-                        : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-                      
-                      const response = await fetch(`${API_BASE}/mass-mail/auth/disconnect`, {
-                        method: 'POST'
-                      });
-                      const data = await response.json();
-                      
-                      if (data.success) {
+                      // Use centralized API
+                      const response = await massMailAPI.disconnect();
+
+                      if (response.data.success) {
                         setIsAuthenticated(false);
                         toast.success('Successfully disconnected from Gmail');
                       } else {
@@ -247,13 +203,13 @@ const MassMailer = () => {
                 </span>
               </div>
             </div>
-            
+
             <form onSubmit={handleSendEmails} className="md-card md-card-content" aria-labelledby="email-form-title">
               <h2 id="email-form-title" className="sr-only">Mass Email Configuration Form</h2>
-              
+
               <fieldset className="file-uploads grid grid-2">
                 <legend className="sr-only">File Upload Section</legend>
-                
+
                 <div className="form-group">
                   <label htmlFor="zip-file" className="form-label">
                     <span aria-hidden="true">📁</span> Certificate ZIP File
@@ -303,7 +259,7 @@ const MassMailer = () => {
 
               <fieldset className="email-config">
                 <legend className="sr-only">Email Configuration</legend>
-                
+
                 <div className="form-group">
                   <label htmlFor="sender-name" className="form-label">Sender Display Name (Optional)</label>
                   <input
@@ -319,7 +275,7 @@ const MassMailer = () => {
                     Custom name that recipients will see as the sender (e.g., "Silver Oak University IEEE SB events.ieee@socet.edu.in"). If empty, only your Gmail address will be shown.
                   </div>
                 </div>
-                
+
                 <div className="form-group">
                   <label htmlFor="email-subject" className="form-label">Email Subject</label>
                   <input
@@ -355,8 +311,8 @@ const MassMailer = () => {
                 </div>
               </fieldset>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="btn btn-primary btn-lg"
                 disabled={loading}
                 style={{ width: '100%' }}

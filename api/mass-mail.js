@@ -37,6 +37,10 @@ export default async function handler(req, res) {
       } else if (nextSegment === 'disconnect') {
         action = 'disconnect';
       }
+    } else if (pathSegments.includes('send-bulk')) {
+      action = 'send';
+    } else if (pathSegments.includes('status')) {
+      action = 'status';
     }
 
     // Google OAuth authentication
