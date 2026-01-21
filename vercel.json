@@ -1,7 +1,11 @@
 {
   "version": 2,
   "functions": {
-    "api/mass-mail.js": {
+    "api/mass-mail/index.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 10
+    },
+    "api/mass-mail/[...slug].js": {
       "runtime": "nodejs18.x",
       "maxDuration": 10
     }

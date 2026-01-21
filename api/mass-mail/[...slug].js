@@ -19,40 +19,52 @@ export default async function handler(req, res) {
     : 'https://certificate-management-platform.vercel.app';
 
   try {
-    // Handle path-based routing via query param (passed from vercel.json rewrite)
+    // Handle path-based routing via query param (passed from vercel.json rewrite) or Vercel dynamic routing
+    // Vercel filesystem routing passes dynamic segments as query parameters (e.g. query.slug)
     const subpath = query.subpath || '';
+    const slug = query.slug || [];
 
-    if (subpath) {
-      if (subpath.includes('auth/google/callback')) {
-        action = 'callback';
-      } else if (subpath.includes('auth/google')) {
-        action = 'auth';
-      } else if (subpath.includes('auth/disconnect')) {
-        action = 'disconnect';
-      }
-    }
-    // Fallback: Parse URL path if subpath not present
-    else {
-      // Parse the URL path to handle both query params and path-based routing
-      const urlPath = url.split('?')[0];
-      const pathSegments = urlPath.split('/').filter(Boolean);
+    // Helper to check path/slug segments
+    const getSegments = () => {
+      // Priority 1: Filesystem routing slug (array of segments)
+      if (Array.isArray(slug) && slug.length > 0) return slug;
 
-      // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
-      if (pathSegments.includes('auth')) {
-        const authIndex = pathSegments.indexOf('auth');
-        const nextSegment = pathSegments[authIndex + 1];
+      // Priority 2: Subpath query param (from rewrites)
+      if (subpath) return subpath.split('/').filter(Boolean);
+
+      // Priority 3: Fallback to URL parsing
+      return url.split('?')[0].split('/').filter(Boolean);
+    };
+
+    const segments = getSegments();
+
+    // Initialize action with default
+    let action = query.action || 'status';
+
+    // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
+    if (segments.includes('auth')) {
+      const authIndex = segments.indexOf('auth');
+
+      // Safety check for next segment
+      if (authIndex !== -1 && authIndex + 1 < segments.length) {
+        const nextSegment = segments[authIndex + 1];
 
         if (nextSegment === 'google') {
-          const callbackSegment = pathSegments[authIndex + 2];
-          action = callbackSegment === 'callback' ? 'callback' : 'auth';
+          // Check for callback
+          if (authIndex + 2 < segments.length) {
+            const callbackSegment = segments[authIndex + 2];
+            action = callbackSegment === 'callback' ? 'callback' : 'auth';
+          } else {
+            action = 'auth';
+          }
         } else if (nextSegment === 'disconnect') {
           action = 'disconnect';
         }
-      } else if (pathSegments.includes('send-bulk')) {
-        action = 'send';
-      } else if (pathSegments.includes('status')) {
-        action = 'status';
       }
+    } else if (segments.includes('send-bulk')) {
+      action = 'send';
+    } else if (segments.includes('status')) {
+      action = 'status';
     }
 
     // Google OAuth authentication
