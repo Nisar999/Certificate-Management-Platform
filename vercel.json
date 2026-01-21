@@ -8,20 +8,8 @@
   },
   "rewrites": [
     {
-      "source": "/api/mass-mail/auth/google/callback",
-      "destination": "/api/mass-mail"
-    },
-    {
-      "source": "/api/mass-mail/auth/google",
-      "destination": "/api/mass-mail"
-    },
-    {
-      "source": "/api/mass-mail/auth/disconnect",
-      "destination": "/api/mass-mail"
-    },
-    {
       "source": "/api/mass-mail/(.*)",
-      "destination": "/api/mass-mail"
+      "destination": "/api/mass-mail?subpath=$1"
     },
     {
       "source": "/api/(.*)",

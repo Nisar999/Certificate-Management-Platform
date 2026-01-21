@@ -10,43 +10,55 @@ export default async function handler(req, res) {
   }
 
   const { method, query, url } = req;
-  
+
   // Environment variables with fallbacks
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'mock_client_id';
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'mock_client_secret';
-  const BASE_URL = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
+  const BASE_URL = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
     : 'https://certificate-management-platform.vercel.app';
 
   try {
-    // Parse the URL path to handle both query params and path-based routing
-    const urlPath = url.split('?')[0];
-    const pathSegments = urlPath.split('/').filter(Boolean);
-    
-    // Handle path-based routing: /api/mass-mail/auth/google
-    let action = query.action || 'status';
-    
-    // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
-    if (pathSegments.includes('auth')) {
-      const authIndex = pathSegments.indexOf('auth');
-      const nextSegment = pathSegments[authIndex + 1];
-      
-      if (nextSegment === 'google') {
-        const callbackSegment = pathSegments[authIndex + 2];
-        action = callbackSegment === 'callback' ? 'callback' : 'auth';
-      } else if (nextSegment === 'disconnect') {
+    // Handle path-based routing via query param (passed from vercel.json rewrite)
+    const subpath = query.subpath || '';
+
+    if (subpath) {
+      if (subpath.includes('auth/google/callback')) {
+        action = 'callback';
+      } else if (subpath.includes('auth/google')) {
+        action = 'auth';
+      } else if (subpath.includes('auth/disconnect')) {
         action = 'disconnect';
       }
-    } else if (pathSegments.includes('send-bulk')) {
-      action = 'send';
-    } else if (pathSegments.includes('status')) {
-      action = 'status';
+    }
+    // Fallback: Parse URL path if subpath not present
+    else {
+      // Parse the URL path to handle both query params and path-based routing
+      const urlPath = url.split('?')[0];
+      const pathSegments = urlPath.split('/').filter(Boolean);
+
+      // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
+      if (pathSegments.includes('auth')) {
+        const authIndex = pathSegments.indexOf('auth');
+        const nextSegment = pathSegments[authIndex + 1];
+
+        if (nextSegment === 'google') {
+          const callbackSegment = pathSegments[authIndex + 2];
+          action = callbackSegment === 'callback' ? 'callback' : 'auth';
+        } else if (nextSegment === 'disconnect') {
+          action = 'disconnect';
+        }
+      } else if (pathSegments.includes('send-bulk')) {
+        action = 'send';
+      } else if (pathSegments.includes('status')) {
+        action = 'status';
+      }
     }
 
     // Google OAuth authentication
     if (action === 'auth' && method === 'GET') {
       const REDIRECT_URI = `${BASE_URL}/api/mass-mail/auth/google/callback`;
-      
+
       const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
         `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
         `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
@@ -64,25 +76,25 @@ export default async function handler(req, res) {
 
       if (error) {
         // Redirect to frontend with error
-        const frontendUrl = BASE_URL.includes('vercel.app') 
-          ? BASE_URL 
+        const frontendUrl = BASE_URL.includes('vercel.app')
+          ? BASE_URL
           : 'http://localhost:3000';
         return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=${encodeURIComponent(error)}`);
       }
 
       if (!code) {
-        const frontendUrl = BASE_URL.includes('vercel.app') 
-          ? BASE_URL 
+        const frontendUrl = BASE_URL.includes('vercel.app')
+          ? BASE_URL
           : 'http://localhost:3000';
         return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=no_code`);
       }
 
       // In production, you would exchange the code for tokens here
       // For now, we'll redirect to the frontend with success
-      const frontendUrl = BASE_URL.includes('vercel.app') 
-        ? BASE_URL 
+      const frontendUrl = BASE_URL.includes('vercel.app')
+        ? BASE_URL
         : 'http://localhost:3000';
-      
+
       // Store the code temporarily (in production, use proper token storage)
       return res.redirect(`${frontendUrl}/mass-mailer?auth=success&code=${encodeURIComponent(code)}`);
     }
@@ -136,7 +148,7 @@ export default async function handler(req, res) {
 
     // Default status endpoint
     const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
-    
+
     return res.json({
       success: true,
       message: 'Mass Mailer API is working!',
