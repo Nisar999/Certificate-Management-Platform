@@ -2,6 +2,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "build",
   "installCommand": "npm install"
+  
   "rewrites": [
     {
       "source": "/api/mass-mail/auth/google/callback",
@@ -16,4 +17,5 @@
       "destination": "/api/mass-mail"
     }
   ]
+
 }
