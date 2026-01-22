@@ -1,54 +1,14 @@
 {
   "version": 2,
-  "functions": {
-    "api/auth/login.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/auth/signup.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/auth/me.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/templates/index.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 15
-    },
-    "api/templates/[id].js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 15
-    },
-    "api/participants/index.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/participants/bulk.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/certificates/generate.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 25
-    },
-    "api/certificates/download.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 20
-    },
-    "api/reports/dashboard.js": {
-      "runtime": "nodejs18.x"
-    },
-    "api/mass-mail/send-bulk.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 60
-    },
-    "api/mass-mail/auth/google.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 10
-    },
-    "api/mass-mail/auth/google/callback.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 10
-    }
-  },
   "rewrites": [
+    {
+      "source": "/api/mass-mail(.*)",
+      "destination": "/api/mass-mail.js"
+    },
+    {
+      "source": "/api/reports(.*)",
+      "destination": "/api/reports/index.js"
+    },
     {
       "source": "/((?!api/.*).*)",
       "destination": "/index.html"
