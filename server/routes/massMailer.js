@@ -5,6 +5,7 @@ const fs = require('fs');
 const XLSX = require('xlsx');
 const { google } = require('googleapis');
 const AdmZip = require('adm-zip');
+const OAuthValidator = require('../utils/oauthValidator');
 const router = express.Router();
 
 // Configure multer for file uploads
@@ -39,6 +40,13 @@ router.get('/', (req, res) => {
       }
     }
     
+    // Handle action parameter for OAuth initiation
+    const action = req.query.action;
+    if (action === 'auth') {
+      console.log('🔄 OAuth initiation requested via action parameter');
+      return res.redirect('/api/mass-mail/auth/google');
+    }
+    
     res.json({
       success: true,
       message: 'Mass Mailer API is working!',
@@ -60,56 +68,126 @@ router.get('/', (req, res) => {
 
 // Google OAuth routes (accessible via /api/mass-mail/auth/google)
 router.get('/auth/google', (req, res) => {
-  const scopes = [
-    'https://www.googleapis.com/auth/userinfo.profile',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.readonly' // Add this scope for profile access
-  ];
+  try {
+    console.log('🚀 OAuth authentication initiated');
+    
+    // Validate configuration before proceeding
+    const validator = new OAuthValidator();
+    const config = validator.loadConfiguration();
+    
+    if (!config.clientId || !config.clientSecret || !config.redirectUri) {
+      console.error('❌ OAuth configuration incomplete');
+      return res.redirect('http://localhost:3000/mass-mailer?auth=error&reason=config_incomplete');
+    }
 
-  const url = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: scopes,
-    prompt: 'consent'
-  });
+    const scopes = [
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.readonly'
+    ];
 
-  res.redirect(url);
+    console.log('📋 OAuth scopes:', scopes);
+    console.log('🔗 Redirect URI:', config.redirectUri);
+
+    const url = oauth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent',
+      state: 'auth-' + Date.now() // Add state for security
+    });
+
+    console.log('✅ OAuth URL generated successfully');
+    console.log('🌐 Redirecting to Google OAuth...');
+    
+    res.redirect(url);
+  } catch (error) {
+    console.error('❌ OAuth initiation failed:', error);
+    res.redirect('http://localhost:3000/mass-mailer?auth=error&reason=oauth_init_failed');
+  }
 });
 
 router.get('/auth/google/callback', async (req, res) => {
+  const correlationId = 'callback-' + Date.now();
+  console.log(`🔄 [${correlationId}] OAuth callback received`);
+  
   try {
-    const { code, error } = req.query;
+    const { code, error, state } = req.query;
+    console.log(`📝 [${correlationId}] Callback parameters:`, { 
+      hasCode: !!code, 
+      error, 
+      state,
+      fullQuery: req.query 
+    });
 
     if (error) {
-      console.error('OAuth authorization error:', error);
-      return res.redirect('http://localhost:3000/mass-mailer?auth=error&reason=authorization_denied');
+      console.error(`❌ [${correlationId}] OAuth authorization error:`, error);
+      const reason = error === 'access_denied' ? 'authorization_denied' : 'oauth_error';
+      return res.redirect(`http://localhost:3000/mass-mailer?auth=error&reason=${reason}&details=${encodeURIComponent(error)}`);
     }
 
     if (!code) {
-      console.error('No authorization code received');
+      console.error(`❌ [${correlationId}] No authorization code received`);
       return res.redirect('http://localhost:3000/mass-mailer?auth=error&reason=no_code');
     }
 
-    console.log('Received authorization code, exchanging for tokens...');
+    console.log(`🔑 [${correlationId}] Authorization code received, exchanging for tokens...`);
+    console.log(`📏 [${correlationId}] Code length: ${code.length}`);
 
-    // Use getToken instead of getAccessToken
+    // Exchange code for tokens
     const { tokens } = await oauth2Client.getToken(code);
+    console.log(`✅ [${correlationId}] Tokens received successfully`);
+    console.log(`🔍 [${correlationId}] Token info:`, {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+      expiryDate: tokens.expiry_date,
+      scope: tokens.scope,
+      tokenType: tokens.token_type
+    });
+
+    // Set credentials for immediate use
     oauth2Client.setCredentials(tokens);
 
-    // Store tokens (in production, use secure storage)
+    // Store tokens securely
     const tokensPath = path.join(__dirname, '..', 'tokens.json');
-    fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2));
-    console.log('Tokens saved successfully to:', tokensPath);
+    const tokenData = {
+      ...tokens,
+      stored_at: new Date().toISOString(),
+      correlation_id: correlationId
+    };
+    
+    fs.writeFileSync(tokensPath, JSON.stringify(tokenData, null, 2));
+    console.log(`💾 [${correlationId}] Tokens saved successfully to:`, tokensPath);
 
+    // Verify tokens work by testing Gmail API access
+    try {
+      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+      const profile = await gmail.users.getProfile({ userId: 'me' });
+      console.log(`✅ [${correlationId}] Gmail API test successful, user:`, profile.data.emailAddress);
+    } catch (apiError) {
+      console.warn(`⚠️ [${correlationId}] Gmail API test failed (tokens may still work):`, apiError.message);
+    }
+
+    console.log(`🎉 [${correlationId}] OAuth flow completed successfully`);
     res.redirect('http://localhost:3000/mass-mailer?auth=success');
+    
   } catch (error) {
-    console.error('OAuth error details:', {
+    console.error(`❌ [${correlationId}] OAuth callback error:`, {
       message: error.message,
       code: error.code,
       status: error.status,
       stack: error.stack
     });
-    res.redirect('http://localhost:3000/mass-mailer?auth=error&reason=token_exchange_failed');
+    
+    // Determine specific error reason
+    let reason = 'token_exchange_failed';
+    if (error.message && error.message.includes('invalid_grant')) {
+      reason = 'invalid_grant';
+    } else if (error.message && error.message.includes('redirect_uri_mismatch')) {
+      reason = 'redirect_uri_mismatch';
+    }
+    
+    res.redirect(`http://localhost:3000/mass-mailer?auth=error&reason=${reason}&details=${encodeURIComponent(error.message)}`);
   }
 });
 
@@ -528,6 +606,146 @@ router.post('/auth/refresh', (req, res) => {
   } catch (error) {
     console.error('Refresh error:', error);
     res.status(500).json({ success: false, message: 'Failed to refresh authentication' });
+  }
+});
+
+// OAuth Configuration Diagnostic Endpoints
+// Health check endpoint for OAuth configuration
+router.get('/auth/health', async (req, res) => {
+  try {
+    console.log('🏥 OAuth health check requested');
+    const validator = new OAuthValidator();
+    const results = await validator.validateConfiguration();
+    
+    const statusCode = results.overall === 'pass' ? 200 : 
+                      results.overall === 'error' ? 500 : 400;
+    
+    res.status(statusCode).json({
+      success: results.overall === 'pass',
+      message: `OAuth configuration ${results.overall}`,
+      data: results,
+      troubleshooting: validator.getTroubleshootingSuggestions()
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Health check failed',
+      error: error.message
+    });
+  }
+});
+
+// Detailed diagnostic report endpoint
+router.get('/auth/diagnostics', async (req, res) => {
+  try {
+    console.log('🔍 OAuth diagnostics requested');
+    const validator = new OAuthValidator();
+    const results = await validator.validateConfiguration();
+    const report = validator.generateDiagnosticReport();
+    
+    res.json({
+      success: true,
+      message: 'Diagnostic report generated',
+      data: {
+        results,
+        report,
+        suggestions: validator.getTroubleshootingSuggestions()
+      }
+    });
+  } catch (error) {
+    console.error('Diagnostics error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Diagnostics failed',
+      error: error.message
+    });
+  }
+});
+
+// Test OAuth URL generation endpoint
+router.get('/auth/test-url', (req, res) => {
+  try {
+    console.log('🧪 OAuth URL test requested');
+    
+    // Validate configuration first
+    const validator = new OAuthValidator();
+    const config = validator.loadConfiguration();
+    
+    if (!config.clientId || !config.clientSecret || !config.redirectUri) {
+      return res.status(400).json({
+        success: false,
+        message: 'OAuth configuration incomplete',
+        missing: {
+          clientId: !config.clientId,
+          clientSecret: !config.clientSecret,
+          redirectUri: !config.redirectUri
+        }
+      });
+    }
+
+    const testOAuth2Client = new google.auth.OAuth2(
+      config.clientId,
+      config.clientSecret,
+      config.redirectUri
+    );
+
+    const scopes = [
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.readonly'
+    ];
+
+    const authUrl = testOAuth2Client.generateAuthUrl({
+      access_type: 'offline',
+      scope: scopes,
+      prompt: 'consent',
+      state: 'test-' + Date.now() // Add test state for identification
+    });
+
+    res.json({
+      success: true,
+      message: 'OAuth URL generated successfully',
+      data: {
+        authUrl,
+        scopes,
+        config: {
+          clientId: config.clientId ? config.clientId.substring(0, 20) + '...' : null,
+          redirectUri: config.redirectUri,
+          environment: config.environment
+        }
+      }
+    });
+  } catch (error) {
+    console.error('OAuth URL test error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate OAuth URL',
+      error: error.message
+    });
+  }
+});
+
+// Configuration validation endpoint
+router.get('/auth/validate-config', async (req, res) => {
+  try {
+    console.log('⚙️ OAuth configuration validation requested');
+    const validator = new OAuthValidator();
+    const results = await validator.validateConfiguration();
+    
+    res.json({
+      success: results.overall === 'pass',
+      message: `Configuration validation ${results.overall}`,
+      data: results
+    });
+  } catch (error) {
+    console.error('Configuration validation error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Configuration validation failed',
+      error: error.message
+    });
   }
 });
 

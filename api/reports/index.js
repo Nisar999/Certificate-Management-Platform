@@ -1,6 +1,9 @@
-// Vercel serverless function for reports API
+// Vercel serverless function for Reports API
+// Now dynamic, fetching real data from Supabase 'email_logs'
+import { supabase } from '../utils/supabaseClient';
+
 export default async function handler(req, res) {
-  // Enable CORS
+  // Config CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -13,70 +16,74 @@ export default async function handler(req, res) {
   const urlPath = url.split('?')[0];
 
   try {
-    // Mock data for demonstration
-    const mockStats = {
-      totalCertificates: 1250,
-      totalBatches: 45,
-      totalParticipants: 1180,
-      successRate: 94.2,
-      categoriesBreakdown: {
-        'Technical': 520,
-        'Non-technical': 380,
-        'Spiritual': 180,
-        'Administrative': 120,
-        'Humanitarian': 50
-      },
-      monthlyGeneration: [
-        { month: 'Jan', certificates: 85 },
-        { month: 'Feb', certificates: 120 },
-        { month: 'Mar', certificates: 95 },
-        { month: 'Apr', certificates: 140 },
-        { month: 'May', certificates: 160 },
-        { month: 'Jun', certificates: 180 }
-      ]
-    };
-
-    // Dashboard stats
+    // ----------------------------------------------------
+    // GET /api/reports/dashboard
+    // Returns aggregate stats from 'email_logs'
+    // ----------------------------------------------------
     if (method === 'GET' && urlPath === '/api/reports/dashboard') {
+      const { count: totalEmails, error: countError } = await supabase
+        .from('email_logs')
+        .select('*', { count: 'exact', head: true });
+
+      const { count: sentEmails } = await supabase
+        .from('email_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'SENT');
+
+      const { count: failedEmails } = await supabase
+        .from('email_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'FAILED');
+
+      if (countError) throw countError;
+
+      // Calculate success rate
+      const successRate = totalEmails > 0
+        ? ((sentEmails / totalEmails) * 100).toFixed(1)
+        : 0;
+
+      // Real data structure
+      const realStats = {
+        totalCertificates: 0, // Placeholder if you add certificate table later
+        totalBatches: 0,      // Placeholder
+        totalParticipants: totalEmails || 0,
+        successRate: parseFloat(successRate),
+        categoriesBreakdown: {
+          'Email Campaigns': totalEmails || 0
+        },
+        monthlyGeneration: [] // Can implement aggregation if needed
+      };
+
       return res.json({
         success: true,
-        data: mockStats
+        data: realStats
       });
     }
 
-    // Certificate reports
-    if (method === 'GET' && urlPath === '/api/reports/certificates') {
-      const { startDate, endDate, category } = req.query;
-      
-      let filteredData = { ...mockStats };
-      
-      if (category) {
-        filteredData.totalCertificates = mockStats.categoriesBreakdown[category] || 0;
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          ...filteredData,
-          filters: { startDate, endDate, category },
-          generatedAt: new Date().toISOString()
-        }
-      });
-    }
-
-    // Email reports
+    // ----------------------------------------------------
+    // GET /api/reports/emails
+    // Detailed email stats
+    // ----------------------------------------------------
     if (method === 'GET' && urlPath === '/api/reports/emails') {
+      const { data: logs, error } = await supabase
+        .from('email_logs')
+        .select('status, sent_at')
+        .order('sent_at', { ascending: false });
+
+      if (error) throw error;
+
+      const total = logs.length;
+      const sent = logs.filter(l => l.status === 'SENT').length;
+      // We don't track opens/clicks in this simple implementation yet
+      const deliveryRate = total > 0 ? ((sent / total) * 100).toFixed(1) : 0;
+
       const emailStats = {
-        totalEmailsSent: 890,
-        deliveryRate: 96.8,
-        openRate: 78.5,
-        clickRate: 12.3,
-        bounceRate: 2.1,
-        recentCampaigns: [
-          { id: 1, name: 'Technical Workshop Certificates', sent: 120, delivered: 118, opened: 95 },
-          { id: 2, name: 'Leadership Training Certificates', sent: 85, delivered: 84, opened: 68 },
-          { id: 3, name: 'Community Service Certificates', sent: 45, delivered: 45, opened: 38 }
-        ]
+        totalEmailsSent: total,
+        deliveryRate: parseFloat(deliveryRate),
+        openRate: 0, // Needs tracking pixel implementation
+        clickRate: 0,
+        bounceRate: 0,
+        recentCampaigns: [] // Could group by date/batch if we added batch_id to schema
       };
 
       return res.json({
@@ -85,113 +92,21 @@ export default async function handler(req, res) {
       });
     }
 
-    // Category statistics
-    if (method === 'GET' && urlPath === '/api/reports/categories') {
-      return res.json({
-        success: true,
-        data: {
-          categories: mockStats.categoriesBreakdown,
-          totalCertificates: mockStats.totalCertificates,
-          generatedAt: new Date().toISOString()
-        }
-      });
-    }
-
-    // Export report data
-    if (method === 'POST' && urlPath === '/api/reports/export') {
-      const { reportType, format, filters = {} } = req.body;
-
-      if (!reportType || !format) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            code: 'VALIDATION_ERROR',
-            message: 'Report type and format are required'
-          }
-        });
-      }
-
-      // Simulate export generation
-      const exportData = {
-        reportType,
-        format,
-        filters,
-        downloadUrl: `https://example.com/exports/${reportType}-${Date.now()}.${format}`,
-        generatedAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-      };
-
-      return res.json({
-        success: true,
-        message: 'Export generated successfully',
-        data: exportData
-      });
-    }
-
-    // Legacy endpoints for backward compatibility
-    if (method === 'GET' && urlPath === '/api/reports/stats') {
-      return res.json({
-        success: true,
-        data: {
-          totalGenerated: mockStats.totalCertificates,
-          successfulGenerations: Math.floor(mockStats.totalCertificates * 0.942),
-          failedGenerations: Math.floor(mockStats.totalCertificates * 0.058),
-          averageGenerationTime: '2.3s'
-        }
-      });
-    }
-
-    if (method === 'GET' && urlPath === '/api/reports/records') {
-      const mockRecords = [
-        { id: 1, batchName: 'Technical Workshop Q2', certificates: 45, status: 'completed', date: '2024-06-15' },
-        { id: 2, batchName: 'Leadership Training', certificates: 32, status: 'completed', date: '2024-06-10' },
-        { id: 3, batchName: 'Community Service', certificates: 28, status: 'processing', date: '2024-06-08' }
-      ];
-
-      return res.json({
-        success: true,
-        data: mockRecords
-      });
-    }
-
-    if (method === 'GET' && urlPath === '/api/reports/cloud-status') {
-      return res.json({
-        success: true,
-        data: {
-          status: 'connected',
-          provider: 'vercel',
-          storageUsed: '2.4 GB',
-          storageLimit: '100 GB',
-          lastSync: new Date().toISOString()
-        }
-      });
-    }
-
-    // Default 404 for unmatched routes
+    // Default "Not Found" for other endpoints not yet ported
     return res.status(404).json({
       success: false,
-      error: {
-        code: 'ENDPOINT_NOT_FOUND',
-        message: 'Reports API endpoint not found',
-        availableEndpoints: [
-          'GET /api/reports/dashboard',
-          'GET /api/reports/certificates',
-          'GET /api/reports/emails',
-          'GET /api/reports/categories',
-          'POST /api/reports/export'
-        ]
-      }
+      message: 'Endpoint not implemented in dynamic version yet',
+      availableEndpoints: [
+        '/api/reports/dashboard',
+        '/api/reports/emails'
+      ]
     });
 
   } catch (error) {
     console.error('Reports API Error:', error);
     return res.status(500).json({
       success: false,
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An internal server error occurred',
-        details: error.message
-      }
+      error: error.message
     });
   }
 }

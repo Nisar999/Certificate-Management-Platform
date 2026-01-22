@@ -1,6 +1,20 @@
-// Vercel serverless function for mass mailer API (simplified structure)
+// Vercel serverless function for Mass Mailer API
+// Replaces local file storage with Supabase and real Gmail sending
+import { google } from 'googleapis';
+import { supabase } from './utils/supabaseClient';
+import AdmZip from 'adm-zip';
+import csv from 'csv-parser';
+import { Readable } from 'stream';
+import Busboy from 'busboy';
+
+export const config = {
+  api: {
+    bodyParser: false, // Disable default body parser to handle multipart/form-data
+  },
+};
+
 export default async function handler(req, res) {
-  // Enable CORS
+  // CORS setup
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -9,158 +23,270 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { method, query, url } = req;
-  
-  // Environment variables with fallbacks
-  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'mock_client_id';
-  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'mock_client_secret';
-  const BASE_URL = process.env.VERCEL_URL 
-    ? `https://${process.env.VERCEL_URL}` 
-    : 'https://certificate-management-platform.vercel.app';
+  const { method, query } = req;
+  const action = query.action || 'status';
+
+  // Environment Config
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+  const BASE_URL = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (req.headers.origin || 'http://localhost:3000');
+  const REDIRECT_URI = `${BASE_URL}/api/mass-mail?action=callback`;
+
+  const oauth2Client = new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    REDIRECT_URI
+  );
+
+  // --- HELPER: Get Tokens from Supabase ---
+  async function getStoredTokens() {
+    const { data, error } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('id', 'gmail_token')
+      .single();
+
+    if (error || !data || !data.access_token) return null;
+    return {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      scope: data.scope,
+      token_type: data.token_type,
+      expiry_date: data.expiry_date
+    };
+  }
+
+  // --- HELPER: Save Tokens to Supabase ---
+  async function saveTokens(tokens) {
+    const { error } = await supabase
+      .from('oauth_tokens')
+      .upsert({
+        id: 'gmail_token',
+        ...tokens,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) console.error('Error saving tokens:', error);
+    return !error;
+  }
 
   try {
-    // Parse the URL path to handle both query params and path-based routing
-    const urlPath = url.split('?')[0];
-    const pathSegments = urlPath.split('/').filter(Boolean);
-    
-    // Handle path-based routing: /api/mass-mail/auth/google
-    let action = query.action || 'status';
-    
-    // Check if URL contains /auth/google or /auth/google/callback or /auth/disconnect
-    if (pathSegments.includes('auth')) {
-      const authIndex = pathSegments.indexOf('auth');
-      const nextSegment = pathSegments[authIndex + 1];
-      
-      if (nextSegment === 'google') {
-        const callbackSegment = pathSegments[authIndex + 2];
-        action = callbackSegment === 'callback' ? 'callback' : 'auth';
-      } else if (nextSegment === 'disconnect') {
-        action = 'disconnect';
-      }
-    }
+    // ==========================================
+    // AUTH FLOW
+    // ==========================================
 
-    // Google OAuth authentication
+    // 1. Initiate Auth
     if (action === 'auth' && method === 'GET') {
-      const REDIRECT_URI = `${BASE_URL}/api/mass-mail/auth/google/callback`;
-      
-      const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&` +
-        `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-        'response_type=code&' +
-        'scope=https://www.googleapis.com/auth/gmail.send%20https://www.googleapis.com/auth/userinfo.email%20https://www.googleapis.com/auth/userinfo.profile&' +
-        'access_type=offline&' +
-        'prompt=consent';
-
+      const authUrl = oauth2Client.generateAuthUrl({
+        access_type: 'offline', // Critical for refresh token
+        scope: [
+          'https://www.googleapis.com/auth/gmail.send',
+          'https://www.googleapis.com/auth/userinfo.email',
+          'https://www.googleapis.com/auth/userinfo.profile'
+        ],
+        prompt: 'consent'
+      });
       return res.redirect(authUrl);
     }
 
-    // OAuth callback
+    // 2. Auth Callback
     if (action === 'callback' && method === 'GET') {
       const { code, error } = query;
 
       if (error) {
-        // Redirect to frontend with error
-        const frontendUrl = BASE_URL.includes('vercel.app') 
-          ? BASE_URL 
-          : 'http://localhost:3000';
-        return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=${encodeURIComponent(error)}`);
+        return res.redirect(`${BASE_URL}/mass-mailer?auth=error&reason=${encodeURIComponent(error)}`);
       }
 
-      if (!code) {
-        const frontendUrl = BASE_URL.includes('vercel.app') 
-          ? BASE_URL 
-          : 'http://localhost:3000';
-        return res.redirect(`${frontendUrl}/mass-mailer?auth=error&reason=no_code`);
-      }
+      const { tokens } = await oauth2Client.getToken(code);
+      oauth2Client.setCredentials(tokens);
 
-      // In production, you would exchange the code for tokens here
-      // For now, we'll redirect to the frontend with success
-      const frontendUrl = BASE_URL.includes('vercel.app') 
-        ? BASE_URL 
-        : 'http://localhost:3000';
-      
-      // Store the code temporarily (in production, use proper token storage)
-      return res.redirect(`${frontendUrl}/mass-mailer?auth=success&code=${encodeURIComponent(code)}`);
+      await saveTokens(tokens);
+
+      return res.redirect(`${BASE_URL}/mass-mailer?auth=success`);
     }
 
-    // Send bulk emails
+    // 3. Auth Status
+    if (action === 'status' && method === 'GET') {
+      const tokens = await getStoredTokens();
+      return res.json({
+        success: true,
+        data: {
+          authenticated: !!tokens,
+          email: tokens ? 'Connected via Google' : null
+        }
+      });
+    }
+
+    // ==========================================
+    // SENDING FLOW (Multipart Upload)
+    // ==========================================
     if (action === 'send' && method === 'POST') {
-      const { recipients, subject, template } = req.body;
+      const tokens = await getStoredTokens();
+      if (!tokens) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
 
-      if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'Recipients array is required'
+      oauth2Client.setCredentials(tokens);
+
+      // Parse Multipart Form Data
+      const busboy = Busboy({ headers: req.headers });
+      const buffers = {};
+      const fields = {};
+
+      return new Promise((resolve, reject) => {
+        busboy.on('file', (fieldname, file, info) => {
+          const chunks = [];
+          file.on('data', (data) => chunks.push(data));
+          file.on('end', () => {
+            buffers[fieldname] = Buffer.concat(chunks);
+            buffers[`${fieldname}_info`] = info;
+          });
         });
-      }
 
-      // Mock email sending
-      const results = recipients.map((recipient, index) => ({
-        email: recipient.email,
-        name: recipient.name,
-        status: Math.random() > 0.05 ? 'sent' : 'failed',
-        messageId: `mock_message_${Date.now()}_${index}`,
-        sentAt: new Date().toISOString()
-      }));
+        busboy.on('field', (fieldname, val) => {
+          fields[fieldname] = val;
+        });
 
-      const successful = results.filter(r => r.status === 'sent').length;
-      const failed = results.filter(r => r.status === 'failed').length;
+        busboy.on('finish', async () => {
+          try {
+            const { subject, body, senderDisplayName } = fields;
+            const csvBuffer = buffers['csvfile'];
+            const zipBuffer = buffers['zipfile'];
 
-      return res.json({
-        success: true,
-        message: 'Bulk email sending completed',
-        data: {
-          total: recipients.length,
-          successful,
-          failed,
-          results
-        }
+            if (!csvBuffer || !zipBuffer || !subject || !body) {
+              res.status(400).json({ success: false, message: 'Missing required fields or files' });
+              return resolve();
+            }
+
+            // Parse ZIP
+            const zip = new AdmZip(zipBuffer);
+            const zipEntries = zip.getEntries(); // Array of ZipEntry
+
+            // Parse CSV
+            const recipients = [];
+            const stream = Readable.from(csvBuffer.toString());
+
+            await new Promise((resolveParse, rejectParse) => {
+              stream
+                .pipe(csv())
+                .on('data', (data) => recipients.push(data))
+                .on('end', resolveParse)
+                .on('error', rejectParse);
+            });
+
+            // Send Emails
+            const results = [];
+            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+            // Get user email for From header
+            let userEmail = '';
+            try {
+              const userInfo = await google.oauth2({ version: 'v2', auth: oauth2Client }).userinfo.get();
+              userEmail = userInfo.data.email;
+            } catch (e) { console.error('Failed to get user email', e); }
+
+            for (const recipient of recipients) {
+              const email = recipient.Email || recipient.email || recipient.Mail;
+              const name = recipient.Name || recipient.name;
+              const certId = recipient['Certificate ID'] || recipient.Certificate_ID || recipient.certificateId;
+
+              if (!email || !certId) {
+                results.push({ email, status: 'SKIPPED', error: 'Missing email or ID' });
+                continue;
+              }
+
+              // Find connection in ZIP
+              const certEntry = zipEntries.find(entry =>
+                entry.name.toLowerCase().includes(certId.toLowerCase()) && !entry.isDirectory
+              );
+
+              if (!certEntry) {
+                results.push({ email, status: 'FAILED', error: 'Certificate not found in ZIP' });
+                continue;
+              }
+
+              // Prepare Email
+              const attachmentData = certEntry.getData().toString('base64');
+              const emailContent = [
+                `To: ${email}`,
+                `Subject: ${subject}`,
+                `From: "${senderDisplayName || 'Certificate System'}" <${userEmail}>`,
+                'MIME-Version: 1.0',
+                'Content-Type: multipart/mixed; boundary="boundary_123"',
+                '',
+                '--boundary_123',
+                'Content-Type: text/html; charset=utf-8',
+                '',
+                body.replace(/{Name}/g, name).replace(/{CertificateID}/g, certId),
+                '',
+                '--boundary_123',
+                `Content-Type: application/pdf; name="${certEntry.name}"`,
+                'Content-Transfer-Encoding: base64',
+                `Content-Disposition: attachment; filename="${certEntry.name}"`,
+                '',
+                attachmentData,
+                '--boundary_123--'
+              ].join('\n');
+
+              const encodedMessage = Buffer.from(emailContent)
+                .toString('base64')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/, '');
+
+              try {
+                await gmail.users.messages.send({
+                  userId: 'me',
+                  requestBody: { raw: encodedMessage }
+                });
+                results.push({ email, status: 'SENT' });
+
+                // Optional: Log to Supabase
+                await supabase.from('email_logs').insert({
+                  recipient_email: email,
+                  certificate_id: certId,
+                  status: 'SENT'
+                });
+
+              } catch (sendError) {
+                console.error(`Failed to send to ${email}`, sendError);
+                results.push({ email, status: 'FAILED', error: sendError.message });
+              }
+
+              // Rate limit 
+              await new Promise(r => setTimeout(r, 500));
+            }
+
+            res.json({
+              success: true,
+              message: `Processed ${recipients.length} recipients`,
+              data: { results }
+            });
+            resolve();
+
+          } catch (processError) {
+            console.error('Processing error:', processError);
+            res.status(500).json({ success: false, error: processError.message });
+            resolve();
+          }
+        });
+
+        busboy.on('error', (e) => {
+          console.error('Busboy error:', e);
+          res.status(500).json({ success: false, error: e.message });
+          resolve();
+        });
+
+        req.pipe(busboy);
       });
     }
 
-    // Disconnect from Gmail
-    if (action === 'disconnect' && method === 'POST') {
-      // In production, you would revoke tokens here
-      return res.json({
-        success: true,
-        message: 'Successfully disconnected from Gmail',
-        data: {
-          disconnectedAt: new Date().toISOString()
-        }
-      });
-    }
-
-    // Default status endpoint
-    const isRealAuth = GOOGLE_CLIENT_ID !== 'mock_client_id';
-    
-    return res.json({
-      success: true,
-      message: 'Mass Mailer API is working!',
-      data: {
-        authenticated: true,
-        email: isRealAuth ? 'Connected via Google OAuth' : 'demo@example.com',
-        quotaRemaining: 500,
-        lastActivity: new Date().toISOString(),
-        authMode: isRealAuth ? 'production' : 'demo',
-        clientId: GOOGLE_CLIENT_ID.substring(0, 20) + '...',
-        availableActions: [
-          'GET /api/mass-mail (status)',
-          'GET /api/mass-mail?action=auth (Google OAuth)',
-          'GET /api/mass-mail?action=callback (OAuth callback)',
-          'POST /api/mass-mail?action=send (Send emails)'
-        ]
-      }
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
 
   } catch (error) {
-    console.error('Mass Mailer API Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'INTERNAL_SERVER_ERROR',
-        message: 'An internal server error occurred',
-        details: error.message
-      }
-    });
+    console.error('API Error:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 }
