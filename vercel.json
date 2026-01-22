@@ -2,11 +2,27 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "source": "/api/mass-mail/(.*)",
+      "destination": "/api/mass-mail.js"
     },
     {
-      "source": "/(.*)",
+      "source": "/api/mass-mail",
+      "destination": "/api/mass-mail.js"
+    },
+    {
+      "source": "/api/test",
+      "destination": "/api/test.js"
+    },
+    {
+      "source": "/api/reports/(.*)",
+      "destination": "/api/reports/index.js"
+    },
+    {
+      "source": "/api/reports",
+      "destination": "/api/reports/index.js"
+    },
+    {
+      "source": "/((?!api/.*).*)",
       "destination": "/index.html"
     }
   ],
