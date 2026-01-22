@@ -1,9 +1,17 @@
 import axios from 'axios';
 
 // Vercel deployment configuration
-const API_BASE = process.env.NODE_ENV === 'production'
-  ? '/api'  // Vercel serverless functions
-  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+// Force relative path '/api' if we are on Vercel (window.location.hostname contains 'vercel.app')
+const isVercel = typeof window !== 'undefined' && window.location.hostname.includes('vercel.app');
+
+const API_BASE = isVercel
+  ? '/api'  // Relative path for Vercel Serverless Functions
+  : process.env.NODE_ENV === 'production'
+    ? '/api'
+    : 'http://localhost:3000/api'; // Use 3000 if local dev triggers API proxy, or 5000 if separate
+
+// Note: If running locally without proxy, typically server is 5000. 
+// But Vercel dev uses 3000. Let's stick to relative if possible, or 5000 for explicit local backend.
 
 // Create axios instance with default config
 const api = axios.create({
