@@ -1,8 +1,8 @@
 // Vercel serverless function for Reports API
 // Now dynamic, fetching real data from Supabase 'email_logs'
-import { supabase } from '../utils/supabaseClient';
+const { supabase } = require('../utils/supabaseClient');
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Config CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');

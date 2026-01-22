@@ -1,5 +1,5 @@
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase client
 // These environment variables must be set in Vercel project settings
@@ -10,4 +10,6 @@ if (!supabaseUrl || !supabaseKey) {
   console.warn('⚠️ Supabase credentials missing (SUPABASE_URL or SUPABASE_KEY)');
 }
 
-export const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder');
+const supabase = createClient(supabaseUrl || 'https://placeholder.supabase.co', supabaseKey || 'placeholder');
+
+module.exports = { supabase };

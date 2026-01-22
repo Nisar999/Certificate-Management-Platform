@@ -1,19 +1,20 @@
 // Vercel serverless function for Mass Mailer API
 // Replaces local file storage with Supabase and real Gmail sending
-import { google } from 'googleapis';
-import { supabase } from './utils/supabaseClient';
-import AdmZip from 'adm-zip';
-import csv from 'csv-parser';
-import { Readable } from 'stream';
-import Busboy from 'busboy';
+const { google } = require('googleapis');
+const { supabase } = require('./utils/supabaseClient');
+const AdmZip = require('adm-zip');
+const csv = require('csv-parser');
+const { Readable } = require('stream');
+const Busboy = require('busboy');
 
-export const config = {
+const config = {
   api: {
     bodyParser: false, // Disable default body parser to handle multipart/form-data
   },
 };
+module.exports.config = config;
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // CORS setup
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
